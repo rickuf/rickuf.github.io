@@ -14,7 +14,7 @@ timezone:
 
 title: Tobias Wicke's Personal Blog # the main title
 
-tagline: Kubernetes & Cloud — Red and Blue Team Notes # it will display as the subtitle
+tagline: Kubernetes & Cloud — Red Team Tectics and Security Engineering # it will display as the subtitle
 
 description: >- # used by seo meta and the atom feed
   Follow this for cool Kubernetes/Cloud Red- or Blue-Team Content.
@@ -39,7 +39,7 @@ social:
     # The first element serves as the copyright owner's link
     - https://github.com/rickuf
     # Uncomment below to add more social links
-    # - https://www.linkedin.com/in/username
+    - https://de.linkedin.com/in/tobias-wicke-43b494182
 
 # Site Verification Settings
 webmaster_verifications:
