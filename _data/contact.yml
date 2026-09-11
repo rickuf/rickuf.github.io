@@ -7,3 +7,6 @@
 - type: linkedin
   icon: 'fab fa-linkedin'
   url: 'https://de.linkedin.com/in/tobias-wicke-43b494182'
+
+- type: rss
+  icon: 'fas fa-rss'
