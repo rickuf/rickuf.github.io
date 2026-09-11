@@ -1,0 +1,9 @@
+# The site's contact information displayed as icons in the sidebar.
+# Docs: https://github.com/cotes2020/jekyll-theme-chirpy/wiki/Getting-Started#social-contact-options
+
+- type: github
+  icon: 'fab fa-github'
+
+- type: linkedin
+  icon: 'fab fa-linkedin'
+  url: 'https://de.linkedin.com/in/tobias-wicke-43b494182'
