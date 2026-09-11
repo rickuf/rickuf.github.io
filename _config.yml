@@ -14,7 +14,7 @@ timezone:
 
 title: Tobias Wicke's Personal Blog # the main title
 
-tagline: Kubernetes & Cloud — Red Team Tectics and Security Engineering # it will display as the subtitle
+tagline: Kubernetes & Cloud — Red Team Tactics and Security Engineering # it will display as the subtitle
 
 description: >- # used by seo meta and the atom feed
   Follow this for cool Kubernetes/Cloud Red- or Blue-Team Content.
@@ -91,7 +91,7 @@ theme_mode: # [light | dark]
 cdn:
 
 # the avatar on sidebar, support local or CORS resources
-avatar:
+avatar: /assets/img/avatar.jpg
 
 # The URL of the site-wide social preview image used in SEO `og:image` meta tag.
 social_preview_image: # string, local or CORS resources
