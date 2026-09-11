@@ -1,3 +1,21 @@
-theme: jekyll-theme-minimal
 title: Tobias Wicke's Personal Blog
 description: Follow this for cool Kubernetes/Cloud Red- or Blue-Team Content.
+
+# Absolute base for the feed, sitemap and SEO tags.
+url: https://rickuf.github.io
+baseurl: ""
+
+theme: jekyll-theme-minimal
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - bin/
+  - vendor/
+  - .devcontainer/
