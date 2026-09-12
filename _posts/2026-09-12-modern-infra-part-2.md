@@ -38,4 +38,15 @@ On a fresh Ubuntu VM, do the following:
 
 - Install docker: `curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh ./get-docker.sh`
 - Clone the ClickStack repo: `git clone https://github.com/ClickHouse/ClickStack.git && cd ClickStack` 
+- Change the `HYPERDX_APP_URL` variable on the .env file (in my case HYPERDX_APP_URL=http://192.168.188.110)
 - Start it: `docker compose up`
+
+After browsing to `<your_ip>:8080`, you should be able to register.
+
+![image](/assets/img/part2/Bildschirmfoto%202026-09-12%20um%2022.38.23.png)
+
+If everything worked as expected, you should be greeted by a UI after logging in.
+
+![image](/assets/img/part2/Bildschirmfoto%202026-09-12%20um%2022.46.47.png)
+
+### Setting Up DVWA
