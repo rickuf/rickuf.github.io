@@ -30,6 +30,10 @@ One VM will represent our application landing zone. This runs the DVWA on Kubern
 
 Due to the unimaginable high cost of throwing everything at our SIEM, I will try to implement the paradigm **logs stay, verdicts travel**. This means: there is one big data lake that holds all of the logs. Based on these logs, alerts are generated that are then investiagted by querying this data lake. This should be engineered in such a way that it scales nicely.
 
+To do this, I am taking heavy inspiration from this [blog](https://engineering.growtherapy.com/post/threat-hunt-ai-how-we-built-an-ai-security-analyst-on-aws-for-under-500-month) by Grow Therapy. Here, logs are stored inside a data lake. On a schedule, detections are run against this data lake. Alerts are then pushed in a uniform format to somewhere people can react to. At first, I am going to implement it on-prem. In a later part, it is planned to re-built everything in a cloud-native way and include cloud logs as well.
+
+Lets summarize: SIEMs are fucking expensive. Way to expensive to store everything you need to actually detect and investigate incidents in modern environments. Because of this, logs are stored in really cheap way and analyzed when they go into this store. This is what we are going to build in this blog.
+
 ### Setting Up the Data Lake
 
 For the data lake I am going to use [Clickhouse](https://clickhouse.com/). The setup is actually quite easy: On your security VM simply follow the steps to install it using [docker compose](https://clickhouse.com/docs/clickstack/deployment/docker-compose) (I later could imagine running this on K8s as well, but let's not overcomplicate things).
@@ -49,4 +53,78 @@ If everything worked as expected, you should be greeted by a UI after logging in
 
 ![image](/assets/img/part2/Bildschirmfoto%202026-09-12%20um%2022.46.47.png)
 
-### Setting Up DVWA
+### Setting Up K8S
+
+For the Kubernetes part, I will use k3s. Simply because its easy to setup and "just works". For observability I'll use Cilium, Hubble and Tetragon. Simply because I like eBPF and thats what everyone seems to be using at the moment. To get the logs from K8s to the data lake, I'll use [Vector](https://github.com/kaasops/vector-operator).
+
+Perform the following steps to install everything we need:
+
+```bash
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="\
+  --flannel-backend=none \
+  --disable-network-policy \
+  --disable-kube-proxy \
+  --disable=traefik \
+  --write-kubeconfig-mode=644" sh -
+```
+
+- `export KUBECONFIG=/etc/rancher/k3s/k3s.yaml`
+
+```bash
+CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
+CLI_ARCH=amd64
+if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
+curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
+sha256sum --check cilium-linux-${CLI_ARCH}.tar.gz.sha256sum
+sudo tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
+rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
+```
+
+- `sudo snap install helm --classic`
+- `helm install cilium oci://quay.io/cilium/charts/cilium --version 1.20.1   --namespace kube-system   --set operator.replicas=1   --set kubeProxyReplacement=true   --set k8sServiceHost=$NODE_IP   --set k8sServicePort=6443   --set ipam.operator.clusterPoolIPv4PodCIDRList='{10.42.0.0/16}'   --set hubble.relay.enabled=true   --set hubble.ui.enabled=true`
+- `cilium version && kubectl get pods -n kube-system`
+
+```bash
+HUBBLE_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/hubble/main/stable.txt)
+HUBBLE_ARCH=amd64
+if [ "$(uname -m)" = "aarch64" ]; then HUBBLE_ARCH=arm64; fi
+curl -L --fail --remote-name-all https://github.com/cilium/hubble/releases/download/$HUBBLE_VERSION/hubble-linux-${HUBBLE_ARCH}.tar.gz{,.sha256sum}
+sha256sum --check hubble-linux-${HUBBLE_ARCH}.tar.gz.sha256sum
+sudo tar xzvfC hubble-linux-${HUBBLE_ARCH}.tar.gz /usr/local/bin
+rm hubble-linux-${HUBBLE_ARCH}.tar.gz{,.sha256sum}
+```
+
+- Check everything with: `hubble status -P`
+
+If everything worked as expected, you now should have one VM with k3s with Cilium and Hubble running and one VM with Clickhouse.
+
+Your k3s should look something like this:
+
+```bash
+$ kubectl get pods -A
+NAMESPACE     NAME                                      READY   STATUS    RESTARTS      AGE
+kube-system   cilium-envoy-m22vf                        1/1     Running   1 (18m ago)   39d
+kube-system   cilium-operator-7b58fc7865-jwghp          1/1     Running   5 (18m ago)   39d
+kube-system   cilium-wgtmx                              1/1     Running   1 (18m ago)   39d
+kube-system   coredns-54996dc9b4-plphf                  1/1     Running   1 (18m ago)   39d
+kube-system   hubble-relay-666d75c98f-f2ppr             1/1     Running   1 (18m ago)   39d
+kube-system   hubble-ui-778c684b94-5vzct                2/2     Running   2 (18m ago)   39d
+kube-system   local-path-provisioner-58d557dc48-mdv9s   1/1     Running   1 (18m ago)   39d
+kube-system   metrics-server-6dc596dfb8-hm9z4           1/1     Running   1 (18m ago)   39d
+```
+
+### Installing DVWA
+
+No need to make a science out of it, I'm simply using a community helm chart.
+
+- `helm repo add web-dvwa https://alppkr.github.io/web-dvwa-new/web-dvwa/`
+- `helm install my-web-dvwa web-dvwa/web-dvwa --create-namespace --namespace dvwa`
+- Wait a few seconds until everything is deployed
+- Port forward to access: `$ kubectl port-forward service/web-dvwa-service --address 0.0.0.0 8080:80 -n dvwa`
+
+> Watch out if you have this running on a VPS. The last command will expose DVWA to the internet if no firewall is configured. You really need to be sure you want to do this.
+
+- Then go to `<your_ip>:8080` and log in with `admin:password`
+
+### Setting up logging
+
