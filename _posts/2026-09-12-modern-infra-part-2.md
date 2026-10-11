@@ -41,8 +41,19 @@ For the data lake I am going to use [Clickhouse](https://clickhouse.com/). The s
 On a fresh Ubuntu VM, do the following:
 
 - Install docker: `curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh ./get-docker.sh`
-- Clone the ClickStack repo: `git clone https://github.com/ClickHouse/ClickStack.git && cd ClickStack` 
-- Change the `HYPERDX_APP_URL` variable on the .env file (in my case HYPERDX_APP_URL=http://192.168.188.110)
+- Clone the ClickStack repo: `git clone https://github.com/ClickHouse/ClickStack.git && cd ClickStack`
+- Change the `HYPERDX_APP_URL` variable on the .env file (in my case HYPERDX_APP_URL=<http://192.168.188.110>)
+- Uncomment the following lines:
+
+```yaml
+  ch-server:
+    [...]
+    ports:
+      - 8123:8123 # http api
+```
+
+> Hint: This exposes CLickHouse to the internet if you are running it on an internet exposed machine. Be _really_ careful when you do this.
+
 - Start it: `docker compose up`
 
 After browsing to `<your_ip>:8080`, you should be able to register.
@@ -128,3 +139,134 @@ No need to make a science out of it, I'm simply using a community helm chart.
 
 ### Setting up logging
 
+OK, first we need to set up _where_ we are going to store the actual logs. For this, we create a ClickHouse table which will store all of our raw logs. Go to `http://<your_ip>:8123/play` and run the following SQL-Statement:
+
+```sql
+CREATE DATABASE IF NOT EXISTS raw_logs;
+
+CREATE TABLE raw_logs.hubble_flows
+(
+    raw      String CODEC(ZSTD(3)),
+    time     DateTime64(9, 'UTC')   MATERIALIZED parseDateTime64BestEffortOrZero(JSONExtractString(raw, 'time'), 9, 'UTC')
+)
+ENGINE = MergeTree
+PARTITION BY toDate(time);
+```
+
+This uses the materialized view feature of ClickHouse which I am going to use _a lot_ more in the future. For now, its only important to know that it extracts values specified from the raw JSON and makes it queryable. Pretty neet if you ask me.
+
+Let's insert a test payload:
+
+```sql
+INSERT INTO raw_logs.hubble_flows VALUES ( '{"time":"2026-10-11T17:40:05.12345", "foo":"bar", "bar":"foo"}');
+```
+
+Great, lets run a test query and see if everything worked:
+
+```sql
+SELECT time, raw FROM raw_logs.hubble_flows;
+```
+
+> Hint: If you do SELECT * FROM .. you will only get back the raw column. This is because materialized views are not directly returned by the * operator.
+
+Let's update Cilium to actually log to a file we can pick up from disk: `helm upgrade cilium oci://quay.io/cilium/charts/cilium --reuse-values --set hubble.export.static.enabled=true -n kube-system`. Restart Cilium so they pick up the changes: `kubectl -n kube-system rollout restart ds/cilium`
+
+Now watch as the logs are written to disk: `tail -f /var/run/cilium/hubble/events.log`.
+
+### Forwarding the logs
+
+I am going to install Vector using its helm chart as well. First, create the following values.yaml:
+
+```yaml
+role: Agent
+
+service:
+  enabled: false
+serviceHeadless:
+  enabled: false
+
+extraVolumes:
+  - name: hubble-export
+    hostPath:
+      path: /var/run/cilium/hubble
+      type: DirectoryOrCreate
+extraVolumeMounts:
+  - name: hubble-export
+    mountPath: /var/run/cilium/hubble
+    readOnly: true
+customConfig:
+  data_dir: /vector-data-dir
+  api: {enabled: false}
+
+  sources:
+    hubble:
+      type: file
+      include: [/var/run/cilium/hubble/events.log]
+
+  transforms:
+    hubble_raw:
+      type: remap
+      inputs: [hubble]
+      source: '. = {"raw": .message}'
+
+  sinks:
+    ch_hubble:
+      type: clickhouse
+      inputs: [hubble_raw]
+      endpoint: http://<your_ip>:8123
+      database: raw_logs
+      table: hubble_flows
+      #auth: {strategy: basic, user: vector, password: "${CLICKHOUSE_PASSWORD}"}
+      batch: {timeout_secs: 5}
+```
+
+> I actually used Claude for most of the generation. In a first iteration, Claude wanted to mount the whole /var/run/cilium directory into the vector pod. In the directory however, there multiple Sockets that can be abused. Here's what Clade had to say when i confronted him:
+> Yes, that’s a real problem, and a readOnly: true mount doesn’t fix it. A read-only mount only prevents creating and changing files; connecting to a Unix socket on it works just the same. It’s the same reason a docker.sock mounted :ro still gives full Docker control.
+>Some of what’s in /var/run/cilium:
+>cilium.sock: the agent’s API. Whoever can talk to it can, among other things, replace or delete network policies, which would take out exactly the protection layer your series builds up.
+>hubble.sock: read access to all flows on the node.
+>envoy/sockets/: the sockets between the agent and Envoy for L7. Depending on the socket, this could even let someone inject fake L7 events into Hubble.
+> But I guess AI is going to take all our jobs and make everything secure by default ¯\\_(ツ)_/¯
+
+Now, lets finally install Vector:
+
+- `helm repo add vector https://helm.vector.dev`
+- `helm repo update`
+- `helm install vector vector/vector   --namespace vector   --create-namespace   --values values.yaml`
+
+Give it a few seconds and logs should start pouring into ClickHouse. But at the moment, it's a little bit uncool to only have a timestamp and the raw data queryable. Let's extend our table schema to something more meaningful:
+
+```sql
+ALTER TABLE raw_logs.hubble_flows
+    ADD COLUMN IF NOT EXISTS node     LowCardinality(String) MATERIALIZED JSONExtractString(raw, 'node_name'),
+    ADD COLUMN IF NOT EXISTS verdict  LowCardinality(String) MATERIALIZED JSONExtractString(raw, 'flow', 'verdict'),
+    ADD COLUMN IF NOT EXISTS src_ns   LowCardinality(String) MATERIALIZED JSONExtractString(raw, 'flow', 'source', 'namespace'),
+    ADD COLUMN IF NOT EXISTS src_pod  String                 MATERIALIZED JSONExtractString(raw, 'flow', 'source', 'pod_name'),
+    ADD COLUMN IF NOT EXISTS dst_ns   LowCardinality(String) MATERIALIZED JSONExtractString(raw, 'flow', 'destination', 'namespace'),
+    ADD COLUMN IF NOT EXISTS dst_pod  String                 MATERIALIZED JSONExtractString(raw, 'flow', 'destination', 'pod_name'),
+    ADD COLUMN IF NOT EXISTS src_ip   String                 MATERIALIZED JSONExtractString(raw, 'flow', 'IP', 'source'),
+    ADD COLUMN IF NOT EXISTS dst_ip   String                 MATERIALIZED JSONExtractString(raw, 'flow', 'IP', 'destination'),
+    ADD COLUMN IF NOT EXISTS dst_port UInt16                 MATERIALIZED greatest(
+        JSONExtractUInt(raw, 'flow', 'l4', 'TCP', 'destination_port'),
+        JSONExtractUInt(raw, 'flow', 'l4', 'UDP', 'destination_port'));
+```
+
+If now we do `SELECT time,node, src_ns, dst_ns, src_pod, src_ip, dst_pod, dst_ip, dst_port FROM raw_logs.hubble_flows LIMIT 10;` we should get something way more sensible.
+
+Lets go back to our HyperDX UI and add a new source:
+
+![image](/assets/img/part2/Bildschirmfoto%202026-10-11%20um%2021.38.03.png)
+
+Fill it out as follows:
+
+![image](/assets/img/part2/Bildschirmfoto%202026-10-11%20um%2021.41.48.png)
+
+Now, your dashboard should look something like this:
+
+![image](/assets/img/part2/Bildschirmfoto%202026-10-11%20um%2021.43.49.png)
+
+If you're familiar with Kibana, you'll feel directly at home. 
+
+With the WHERE clause in the HyperDX UI, we can filter the logs. e.g. `WHERE src_ns = 'dvwa'` to only get logs from our DVWA namespace. Cool.
+
+## Summary 
