@@ -269,4 +269,8 @@ If you're familiar with Kibana, you'll feel directly at home.
 
 With the WHERE clause in the HyperDX UI, we can filter the logs. e.g. `WHERE src_ns = 'dvwa'` to only get logs from our DVWA namespace. Cool.
 
-## Summary 
+## Summary
+
+Phew, that was longer than expected, but the groundwork is done: We have a vulnerable Kubernetes cluster and logging (at least hubble) in place. These logs can comfortabely be queried using SQL.
+
+In the next part, I will add Tetragon and the Kubernetes logs as well and try to reduce the noise generated in the logs. From there on, the groundwork is done to finally start hacking some shit.
