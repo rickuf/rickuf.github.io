@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Attacking & Defending Modern Infrastructure Part #1: Setting the scene"
-author: "Tobias Wicke"
+author: tobias_wicke
 tags: [kubernetes, security, landing zones]
 ---
 

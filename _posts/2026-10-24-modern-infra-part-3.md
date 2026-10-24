@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Attacking & Defending Modern Infrastructure Part #3: Extending the logs"
-author: "Tobias Wicke"
+author: tobias_wicke
 tags: [kubernetes, security, landing zones, red team, blue team, SOC, ClickHouse]
 ---
 
