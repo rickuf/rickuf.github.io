@@ -2,7 +2,7 @@
 layout: post
 title: "Attacking & Defending Modern Infrastructure Part #2: Getting Started"
 author: "Tobias Wicke"
-tags: [kubernetes, security, landing zones, red team, blue team, SOC, Clickhouse]
+tags: [kubernetes, security, landing zones, red team, blue team, SOC, ClickHouse]
 ---
 
 OK, let's get our hands dirty. The goal is to create a vulnerable configuration, attack it, detect the attack and then harden the environment in such a way that the attack is no longer possible. Additionally, I want to design the detection part in such a way that it _could_ be useful in a real-world environment. (At least I imagine that it could. I work as a red teamer, I have never built a scaling cloud-native SOC in my life).
