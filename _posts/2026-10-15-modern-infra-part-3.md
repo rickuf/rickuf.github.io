@@ -2,12 +2,12 @@
 layout: post
 title: "Attacking & Defending Modern Infrastructure Part #3: Extending the logs"
 author: "Tobias Wicke"
-tags: [kubernetes, security, landing zones, red team, blue team, SOC, Clickhouse]
+tags: [kubernetes, security, landing zones, red team, blue team, SOC, ClickHouse]
 ---
 
-In the previous blog I started with the general setup of the infrastructure: two simulated landing zones. One containing the security infrastructure (in this case it is "just" ClickHouse). The other contains our application layer: a k3s cluster running Damn Vulnerable Web Application.
+In the previous blog I started with the general setup of the infrastructure: two simulated landing zones. One contains the security infrastructure (in this case it is "just" ClickHouse). The other contains our application layer: a k3s cluster running Damn Vulnerable Web Application.
 
-At the moment, all Cilium events events are forwarded to ClickHouse. This means we have all the firewall logs from inside our cluster. Good start, but not enough to really get into the details of disigning custom detections. This blog has two goals:
+At the moment, all Cilium events are forwarded to ClickHouse. This means we have all the firewall logs from inside our cluster. Good start, but not enough to really get into the details of designing custom detections. This blog has two goals:
 
 1. Extending the collected logs with Tetragon to gain visibility into containers
 2. Fine tune the current log sources to decrease the overall noise level
@@ -16,11 +16,11 @@ Let's get started.
 
 ## Adding Tetragon
 
-OK, what exactly is Tetragon? [Tetragon](https://tetragon.io/) uses eBPF under the hood to inspect what the containers running on a host are doing (maybe I'll write a complete blogpost explaining how everything worls together one day). This telemetry is then exported to logfile, just the same as Cilium. What a coincidence - they are both made by the same people based on the same stack.
+OK, what exactly is Tetragon? [Tetragon](https://tetragon.io/) uses eBPF under the hood to inspect what the containers running on a host are doing (maybe I'll write a complete blogpost explaining how everything works together one day). This telemetry is then exported to a logfile, just the same as Cilium. What a coincidence - they are both made by the same people based on the same stack.
 
-With this, we have visibility into what is happening inside a container, as well as what the container tries to reach. With this, we'll have everything we need to really detect attacks. It is the Sysmon of Kubernetes (or containers in general).
+With this, we have visibility into what is happening inside a container, as well as what the container tries to reach. Now we'll have everything we need to really detect attacks. It is the Sysmon of Kubernetes (or containers in general).
 
-> Yes i know that Tetragon can also detect network telemetry. The advantage with Hubble is, that it also detects the events if an application were to ship with their own TCP stack. Looking at you nmap 👀
+> Yes, I know that Tetragon can also detect network telemetry. The advantage of Hubble is that it also detects the events if an application were to ship with their own TCP stack. Looking at you, nmap 👀
 
 ### Setting up Tetragon
 
@@ -31,7 +31,7 @@ We can install Tetragon by using the official helm chart:
 - `helm install tetragon cilium/tetragon -n kube-system`
 - Give it a few seconds and check if logs are written with `sudo tail -f /var/run/cilium/tetragon/tetragon.log`
 
-On the ClickHouse SQL-Playground, create the corresponding logs table for our newly generated tetragon logs:
+On the ClickHouse SQL-Playground, create the corresponding logs table for our newly generated Tetragon logs:
 
 ```sql
 CREATE TABLE raw_logs.tetragon_events
@@ -114,16 +114,16 @@ customConfig:
 [...]
 ```
 
-Then apply the new config: `helm upgrade vector vector/vector --reuse-values  --namespace vector   --values values.yaml`
+Then apply the new config: `helm upgrade vector vector/vector --reuse-values --namespace vector --values values.yaml`
 
 After waiting for a few seconds, check if logs are arriving in the SQL playground by executing `select * from raw_logs.tetragon_events limit 10;`
-> If no logs show up, generate events by abusing the comand injection vulnarbility in DVWA. It will generate events that are logged by default in Tetragon.
+> If no logs show up, generate events by abusing the command injection vulnerability in DVWA. It will generate events that are logged by default in Tetragon.
 
 Now, in HyperDX, create a new source which looks like this:
 
 ![image](/assets/img/part3/Bildschirmfoto%202026-10-24%20um%2020.09.23.png)
 
-This, in turn should provide us with a view similiar to this:
+This, in turn, should provide us with a view similar to this:
 
 ![image](/assets/img/part3/Bildschirmfoto%202026-10-24%20um%2020.11.04.png)
 
@@ -131,7 +131,7 @@ We now have a live dashboard with every process that is started inside our conta
 
 ### Extending Tetragon to collect file events
 
-Now here comes the kicker: Tetragon is not only able to detect process starts. It can do almost everything that is possible to be collected using eBPF. Let's extend it to also include file accesses in the pods.
+Now here comes the kicker: Tetragon is not only able to detect process starts. It can do almost everything that can be collected using eBPF. Let's extend it to also include file accesses in the pods.
 
 Tetragon does this by defining CRDs in the cluster. This means that we can define which events are collected from now on with a simple `kubectl apply`. I'll say it again: how cool is that?
 
@@ -316,13 +316,13 @@ spec:
 
 > This is shamelessly stolen from the Tetragon examples in the official repo under https://raw.githubusercontent.com/cilium/tetragon/main/examples/quickstart/file_monitoring.yaml
 
-This shows how absolutely powerful this whole thig really is. We can specify pre- and suffixes for the files we want to generate events for.
+This shows how absolutely powerful this whole thing really is. We can specify pre- and suffixes for the files we want to generate events for.
 
 Let's apply it to our cluster:
 
 `kubectl apply -f tetragon/file_access.yaml`.
 
-Then, lets abuse the LFI in our DVWA (http://<dvwa_ip>/vulnerabilities/fi/?page=/etc/passwd) and see what happens:
+Then, let's abuse the LFI in our DVWA (http://<dvwa_ip>/vulnerabilities/fi/?page=/etc/passwd) and see what happens:
 
 ![image](/assets/img/part3/Bildschirmfoto%202026-10-24%20um%2020.52.51.png)
 
@@ -341,17 +341,17 @@ ALTER TABLE raw_logs.tetragon_events
             JSONExtractArrayRaw(raw, event_type, 'args'))) AFTER function_name;
 ```
 
-Then change the data source to include `function_name` and `file_arg` per default in the query:
+Then change the data source to include `function_name` and `file_path` by default in the query:
 
 ![image](/assets/img/part3/Bildschirmfoto%202026-10-24%20um%2021.07.10.png)
 
 Now we're talking.
 
-> Hint: Currently, failed syscalls are not logged. If you for example try to read /etc/shadow, the call is blocked with an access denied error. This means that the syscalls we currently filter for are not made. I will refine the policies in the future to be more useful.
+> Hint: Currently, failed syscalls are not logged. If you for example try to read /etc/shadow, the call is blocked with an access denied error. The read is denied, so the hook never reports it. I will refine the policies in the future to be more useful.
 
 ## Reducing Noise
 
-OK, really nice. Now, if we switch back to the Hubble Flow overview in HyperDX, we see that hubble generates _way_ more telemetry than our Tetragon events. But if we look at it, most of it is in the `kube-system` namespace. If we dig a bit deeper, most of that is the metrics service.
+OK, really nice. Now, if we switch back to the Hubble Flow overview in HyperDX, we see that Hubble generates _way_ more telemetry than our Tetragon events. But if we look at it, most of it is in the `kube-system` namespace. If we dig a bit deeper, most of that is the metrics service.
 
 ```bash
 $ sudo tail -n 2000 /var/run/cilium/hubble/events.log | jq -r '
@@ -372,11 +372,11 @@ $ sudo tail -n 2000 /var/run/cilium/hubble/events.log | jq -r '
      11 kube-system/metrics-server-6dc596dfb8-hm9z4 -> reserved:host,reserved:kube-apiserver:34786 FORWARDED
 ```
 
-Not that ClickHouse can't handle this, but we don't need to waste any precious CPU or RAM on stuff we don't use anyways. Lets create a Hubble dynylist config:
+Not that ClickHouse can't handle this, but we don't need to waste any precious CPU or RAM on stuff we don't use anyway. Let's create a Hubble denylist config:
 
-First, export the current cilium config: `helm get values cilium -n kube-system -o yaml > cilium/cilium-values.yaml`
+First, export the current Cilium config: `helm get values cilium -n kube-system -o yaml > cilium/cilium-values.yaml`
 
-Then change the config so it looks something liek this:
+Then change the config so it looks something like this:
 
 ```yaml
 hubble:
@@ -393,7 +393,7 @@ hubble:
 Then:
 
 - apply the changes: `helm upgrade cilium cilium/cilium -n kube-system -f cilium/cilium-values.yaml`
-- restart cilium: `kubectl -n kube-system rollout restart ds/cilium`
+- restart Cilium: `kubectl -n kube-system rollout restart ds/cilium`
 
 After the restart, the number of ingested logs should decrease drastically:
 
@@ -403,4 +403,4 @@ After the restart, the number of ingested logs should decrease drastically:
 
 OK nice. In this blog, I added Tetragon to get visibility into what is actually happening inside the container. Additionally, I reduced the overall noise level generated by the Hubble logs to only focus on what is actually useful for us.
 
-In the next part I am finally starting to do actual attacks against the cluster. I will show the different types of attacks, how we can detect them using our ClickHouse infrastructure and how to harden the cluster so the attacks become impossible. 
+In the next part I will finally start doing actual attacks against the cluster. I will show the different types of attacks, how we can detect them using our ClickHouse infrastructure and how to harden the cluster so the attacks become impossible. 
