@@ -5,6 +5,10 @@ author: tobias_wicke
 tags: [blue team, SOC, Security Engineering]
 ---
 
+> Hint: I touch on a lot of different aspects and techniques throughout this blogpost. I linked the original blogposts I used to get an understanding of the topic. I **highly** recommend reading them as well to get a deeper understanding on each of the covered topics.
+
+> Also: I work as a red Teamer and talk from the perspective and impressions I've gathered over the last years during numerous Red- and Purple Teams. I do not work in a SOC. I think a lot about how to improve SOCs and their detections, but I don't have operational experience working in one.
+
 As a Red Teamer, I really like to read CrowdStrike's yearly [threat report](https://www.crowdstrike.com/en-us/global-threat-report/). It gives a great overview of what is currently happening and more importantly _which overall trends are emerging_. If you blend out all the marketing and AI-is-killing-us-all-now-give-us-your-money-speak, the picture that is painted is actually quite useful and should be analyzed further:
 
 The typical malware-on-an-endpoint-chain is no longer the primary attack vector. The following statements by CrowdStrike supplement this thesis:
@@ -40,8 +44,9 @@ With the current setup of a typical SOC, which steps can be detected? 1 and 5. A
 
 OK, to get the full picture we need to collect all logs. This includes identity providers (Entra, Okta, Auth0, etc.), SaaS applications (GitHub, ServiceNow, SAP, etc.) and cloud provider logs (AWS CloudTrail, Azure Audit Logs, etc.), as well as the existing infrastructure (endpoint, EDR). The first instinct might be to throw all these logs in the SIEM as well and be done with it. This way the SOC can simply write new detection rules for the new stuff and everybody is happy.
 Well, not really. Just think about what you are currently paying for SIEM. Then think about what you would be paying if you increased the log volume 10 times.
+
 The solution for this increasingly growing number of logs is a datalake. It is literally designed to store and analyze petabytes of data in the most (cost)-efficient way possible. Go and ask your data scientist.
-For this, I really like to highlight the first part of this blog written by [GrowTherapy](https://engineering.growtherapy.com/post/threat-hunt-ai-how-we-built-an-ai-security-analyst-on-aws-for-under-500-month). An overview over data lakes instead of SIEMs can be found [in this blogpost](https://www.detectionatscale.com/p/the-transition-from-monolithic-siems)
+For this, I really like to highlight the first part of this blog written by [GrowTherapy](https://engineering.growtherapy.com/post/threat-hunt-ai-how-we-built-an-ai-security-analyst-on-aws-for-under-500-month). A more general overview over data lakes instead of SIEMs can be found [in this blogpost](https://www.detectionatscale.com/p/the-transition-from-monolithic-siems)
 
 At the moment, most infrastructure for SOCs looks like this:
 
