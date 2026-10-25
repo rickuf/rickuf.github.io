@@ -67,7 +67,7 @@ The technical details on how this is implemented depends on each company and is 
 
 The overall goal is: logs stay, verdicts travel.
 
-> If you are interested in the technical details, check out my blog series _Attacking and defending modern infrastructure_.
+> If you are interested in the technical details, check out my blog series [_Attacking and defending modern infrastructure_]({% post_url 2026-09-11-modern-infra-part-1 %}).
 
 ### One Standard to Rule Them All
 
