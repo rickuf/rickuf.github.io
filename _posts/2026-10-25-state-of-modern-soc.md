@@ -69,7 +69,7 @@ The overall goal is: logs stay, verdicts travel.
 
 > If you are interested in the technical details, check out my blog series _Attacking and defending modern infrastructure_.
 
-## One Standard to Rule Them All
+### One Standard to Rule Them All
 
 That's cool and all, but writing detection rules for each and every log source is getting cumbersome really fast. So I've come to you to talk about our lord and savior: [OCSF](https://ocsf.io/). OCSF is a normalized schema for security logs similar to Elastic's ECS. The full schema can be found here: https://schema.ocsf.io/
 
@@ -79,6 +79,31 @@ This means, that if the data is normalized in the datalake to OCSF, queries can 
 
 Let's see how powerful this is with two examples: password spraying and portscans. Both are pretty basic attacks, but they can occur anywhere in a company's infrastructure and have critical impact. Password spraying might be performed by an attacker against internet facing services or against an internal system after compromising a host. The same is true for portscanning. It can be the first indicator of an upcoming attack against external facing infrastructure. But it can also happen in an AWS VPC or even inside a Kubernetes cluster. Since all queries are written against OCSF, one query for each attack handles all of these cases at once.
 
-## Detections and AI 
+## Improving Detection Speed
 
-## The need for speed
+So far, so good. I've talked about how SOCs can be able to detect attacks ranging multiple domains and different parts of infrastructure. What hasn't been awnsered is the second problem: the speed at which these attacks are performed. And the boring awnser is: automate whatever you can. How original.
+
+However, I want to point out two really interesting approaches to this.
+
+### Automatically Contacting of Employees
+
+[Dropbox](https://dropbox.tech/security/meet-securitybot-open-sourcing-automated-security-at-scale) has written a pretty interesting blog about how they approach this. One of the most time consuming parts is actually contacting the employee that triggered an alert and asking them what the hell they were doing. For this, they created a Slack bot that automatically contacts the person that triggered an alert and asks for clarification. This doesn't have to be Slack. Every major communication platoform supports bots in one form or another.
+The big takeaway here is that the response is logged as well. If the employee triggered an alert by doing something benign, they need to clarify in the chatbot what they were doing. If they can't explain the alert or don't respond in an adequate timeframe, the alert is escalated.
+
+### Letting AI Do the Gruntwork
+
+The second step to automate might arguably be the more important one: letting AI do the triage. Yes, yes, I know: "Just throw an agent at it bro. Trust me." seems to be the solution to every problem at the moment. But let me specify:
+
+[Figma](https://www.figma.com/en-us/blog/how-we-secure-figmas-internal-systems-with-agents/) wrote a blog post about how they use agents to improve detection capabilities and overall speed. I am not going into all of the details (read Figmas blog, it's really worth it). The intersting part here is that Figma built a RAG platform first to have an easy way to look up past incidents. Only afterwards they realised that this is the perfect platform for an agentic workflow.
+
+I am a big fan of the mantra "What can be done deterministically will be done deterministically". An agent should only be used if the number of steps is not knwon beforehand or the reasoning of the model actually adds value. Otherwise, you use the slowest but at the same time most expensive solution for the problem.
+
+What does this mean exactly for our SOC-agent and were can it actually add value? Let's assume one of the alerts end up in the previously explained alert store. The security-bot picks it ups and asks the user if they can explain it. The user sais they don't have a clue and the alert is escalated. The next step is usually to gather additional context, enrich the alert and look at historic data or similar alerts. Remember: what can be done deterministically will be done deterministically. That means that all the enrichment that can be done (e.g. looking up an IP address in IOC lists) automatically is done that way. Only _afterwards_, this data is passed on to the agent. The agent only has a limited set of tools at its disposal: looking up Entra logs, looking up EDR logs, looking up the internal knowledgebase, querying the datalake, etc. The important thing is, that the agent only has read acess with all these tools. The agent itself cannot change anything and it isn't able to run custom scripts or access a terminal. With the information gathered, the agent creates a first verdict and forwards it to a human.
+
+Based on this verdict, a human decides to close the ticket or to further escalate.
+
+Based on this, false positives can be differentiated from real alerts in machine speed, rather than human speed.
+
+## Summary
+
+To summarize: attackers are evolving, and most SOCs are still defending against the attacks of 2015. Attacks are mostly malware free, they cross identity, SaaS, cloud and endpoint in a single chain, and they reach the crown jewels in about half an hour. A SOC that only watches the endpoint and needs weeks to coordinate five teams will not catch that. Catching it takes two things. The first is visibility: get _all_ the logs into a datalake instead of the SIEM, normalize them to OCSF so one detection covers every log source, and only send the verdicts to a central place. The second is speed: automate everything that can be automated deterministically, let a bot ask the employee before a human analyst has to, and let a read-only agent do the enrichment and the first triage so humans only make the final call. None of this can be bought off the shelf. It has to be built on top of what the company already has, by people who know what normal looks like in their own environment. Next time the Red Team skips the phishing mail and goes straight for your ServiceNow, you'll want it in place.
